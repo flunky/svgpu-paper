@@ -62,7 +62,32 @@ Rendering realistic 3D scenes to vector graphics in real time has not yet been e
 \copyrightspace
 
 \section{Introduction}
-John will write.
+Auzinger et al. \cite{auzinger2013} showed that the computation of analytic
+visibility can be practical on the GPU. They focused on the application of
+antialiased rendering, showing that analytic visibility could be computed
+faster than the multisampling needed for some situations.
+
+Our vector graphics rendering system is designed to convert a 3-D scene mesh
+into a view-projected planar map with depth complexity one. This result can be
+directly converted into a vector graphics representation (e.g. an SVG file) or
+can be quickly rasterized without need for a depth buffer. This system also
+extracts the visual contour as well as the regions it bounds, and both can be
+easily stylized when rendered.
+
+An emerging trend of the video gaming industry is cloud gaming. In this gaming
+as a service (GaaS), the display of a video game is rendered by a server and
+the resulting image is transmitted over the internet to a thin client. Because
+videogames are live, block motion is typically not predicted and the resulting
+MPEG video stream consists solely of bandwidth consuming I-frames. While block
+motion could be determined between the current frame and the previous, this
+analysis on a generic image stream is too compute intensive to be practical.
+
+The SVGPU rendering pipeline outputs a stream of frames each consisting of a
+triangle mesh planar map. The vertices of this planar mesh include the proper
+texture coordinates, and are frame coherent. Hence, they can be easily
+converted into the block motion MPEG was originally designed to utilize to
+greatly reduce the bandwidth of cloud gaming.
+
 \section{Background}
 TBW
 \begin{itemize}
