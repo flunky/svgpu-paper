@@ -140,7 +140,13 @@ Our goal is to output a planar map representation of a 3D scene in real time. Ad
 A planar map representation affords us several benefits. First, it is a resolution independent representation that can be efficiently rendered on to an arbitrarily large display. The planer-map renderer needn’t compute anything outside of point in polygon tests and avoids the need to sort depth. Secondly, the format is compact, smaller than the analogous raster image in most cases. This compact format would enables lower latency in client server models and lower bandwidth transmition of video.  These are discussed in more detail later. 
 \\\\
 One byproduct of our pipeline is silhouette and contour edges. These edges are useful for anti-aliasing and NPR effects. This allows a render to restrict anti-aliasing operations to pixels on or near silhouette edges in a similar manner to popular a family of real time post-processes anti-aliasing techniquest such as MLAA, SMAA, and CMAA, which all filter on regions determined to be touched by silhouette edges. There are other techniques which compute analytic silhouette based anti-aliasing, but these techniques are not yet real time [TODO:citation?].
-\\\\
+
+\begin{figure*}
+\includegraphics{images/pipeline.pdf}
+\caption{The stages of our binned vector graphics rendering system.}
+\label{fig:pipeline}
+\end{figure*}
+
 Our pipeline consists of 5 stages. The first stage, transform, clipping, and binning is borrowed directly from the rasterization pipeline. Our system makes no noteworthy additions to these stages. The next three stages make up our analytic visibility pipeline. The first stage of analytic visibility, second over all, is silhouette extraction via hashing. Silhouettes are computed as triangles with neighbor-less edges or triangles with oppositely signed normal vectors that share an edge. In the third stage the triangles in each bin are clipped to the silhouettes in that bin.  This simplifies the next pipeline stage significantly by eliminating the need for brute force triangle vs triangle clipping. In the fourth stage a discard test is performed on each triangle by clipping it against the other triangles in the bin. The clip here is simplified to a “would clip” and discard test, since all silhouette edge clipping operations have already been resolved. In the fifth stage our system has the choice of either converting to a vector graphics format or rendering vertex interpolated values via rasterization.
 
 \subsection{Design Requirements}
