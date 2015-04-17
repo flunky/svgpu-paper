@@ -71,7 +71,9 @@ though raster displays have been available for decades, the output of 3-D
 scenes as a vector planar map is still a valuable process for many
 applications. For example, the rendering of 3-D scenes as line art and other
 non-photorealistic rendering approaches are based on the extraction of
-silhouettes and visible regions as planar maps, e.g. \cite{lineart,npr}.
+silhouettes and visible regions as planar maps, e.g. \cite{lineart,npr}. The
+real-time rendering of 3-D shape outlines was a primary feature behind the
+appeal of the Teddy sketching interface \cite{igarashi1999}.
 
 As the output of a 3-D scene renderer, a planar map image of 2-D polygons has
 several advantages over a raster image of pixels. First, vector images provide
@@ -87,8 +89,9 @@ performed, e.g. \cite{manson2011}.
 
 \begin{figure}[t] \centering
 \includegraphics[height=3in]{images/bunny-red.png}
-\caption{A toon shaded Stanford bunny rendered as a planar map consisting only
-of visible triangles in about 41 ms by the SVGPU vector renderer.}
+\caption{A toon shaded Stanford bunny rendered as a resolution-independent
+planar map of visible triangle portions (depth complexity is no greater than
+one) in about 34 ms (30 Hz) by the SVGPU vector renderer.}
 \end{figure}
 
 Second, in an era where wireless network bandwidth is a critically
@@ -159,11 +162,49 @@ as load balancing and tuning.
 % final render target resolution increases.
 
 \section{Previous Work}
+The hidden line problem was well studied decades ago \cite{sutherland1974}.
+Most modern approaches been based on Appel's algorithm \cite{appel1967} which
+extracts continuous silhouette components to display, computing the
+quantitative invisibility as these components cross each other.
+The main benefit of Appel's algorithm is that once the silhouette is
+extracted (after a linear pass through the scene polygons), the polygons no
+longer need to be processed, and comparisons only need to occur along the
+silhouette edges, significantly reducing computation. The main drawback is
+that the mesh silhouette is plagued with special cases, including cusps,
+switchbacks and non-transverse intersections that can affect robustness. Our
+approach clips triangles instead of the silhouette to the silhouette edges,
+and does not require the silhouette edges to be connected into a continuous
+curve for fragile incremental visibility computation.
+
+Robert's algorithm is an even older approach that simply compares all pairs of
+scene polygons, clipping and culling occluded portions of polygons
+\cite{roberts1963}. These all-pairs comparisons were slightly reduced 
+using bounding boxes, but still resulted in a quadratic time complexity, but
+also a significantly more robust output than Appel's algorithm. Our SVGPU
+approach leverages this robustness, and further reduces the impact of
+quadratic all-pairs triangle occlusion comparisons through binning, in
+addition to other culling strategies, and maps better to the brute force
+streaming parallelism offered by modern GPU's than does Appel's algorithm.
+
 A large number of non-photorealistic rendering systems have included renderers
 that convert a 3-D scene into 2-D planar map
 \cite{winkenbach94,hertzmann2000,stroila2008,eisemann2008,eisemann2009,karsch2011},
-but these have largely
-been offline CPU programs that focused on the quality of the output.
+but these have largely been offline CPU programs that focused on the quality
+of the output. Some have looked at the real-time NPR, e.g. by fast (sublinear)
+statistical gloabl searches for seed segments of the silhuette
+\cite{markosian1997}, instead of our linear-time spatial hash approach to
+silhouette extraction. A variety of other techniques have also been employed
+to accelerate NPR rendering based on actual silhouette edges
+\cite{buchanan2000,kim2005} or their approximation \cite{raskar1999}.
+Some have also developed hardware solutions for real-time NPR contour
+extraction \cite{raskar2001,ho2004,wang2005}.
+
+The GPU has been used to compute the high-quality visibility of stylized lines
+by using a texture atlas as an intermediate frame buffer for compositing
+\cite{cole2009}, but the actual visibility is based here on the depth buffer.
+The GPU was also used for analytic visibility of polygons, using an edge-based
+approach \cite{auzinger2013}, whereas out approach is triangle based, using
+the silhouette edges only for clipping to yield better performance results.
 
 
 % \item RYU, D. 2001. Visibility Layer Decomposition. Senior thesis, Harvard University.
@@ -171,32 +212,6 @@ been offline CPU programs that focused on the quality of the output.
 
 % \item AUZINGER T., GUTHE M., JESCHKE S.: Analytic Anti-Aliasing of Linear Functions on Polytopes.
 % Nah
-
-\begin{itemize}
-\item Legacy 
-\item Analytic
-\begin{itemize}
-\item Edwin Catmull, A Hidden-Surface Algorithm with Anti-Aliasing
-\end{itemize}
-\item Depth Buffer
-\begin{itemize}
-\item A Subdivision Algorithm for Computer Dis-play of Curved Surfaces
-\end{itemize}
-\item Hierarchical Z
-\begin{itemize}
-\item Hierarchical Z-Buffer Visibility Ned Greene Michael Kass Gavin Miller
-\end{itemize}
-\item BSP
-\begin{itemize}
-\item On visible surface generation by a priori tree structures H Fuchs, ZM Kedem, BF Naylor
-\end{itemize}
-\item Surveys
-\begin{itemize}
-\item A survey of practical object space visibility algorithms  S Ghali
-\item A SURVEY OF OBJECT-SPACE HIDDEN SURFACE REMOVAL SUSAN E. DORWARD
-\item Charles W. Grant. Visibility Algorithms in Image Synthesis
-\end{itemize}
-\end{itemize}
 
 \section{The SVGPU Pipeline}
 
@@ -235,7 +250,7 @@ where the hash table lists any number of triangles besides two.
 % As previously stated computing silhouettes is important to our pipeline because it simplifies the clipping computations needed to compute analytic visibility. Silhouettes have additional benefits to rendering, as previously mentioned. Silhouette processing simplifies the computation in two ways. Now the system only needs to compute the clipping of each triangle against one edge at a time, the silhouette edges. Alternatively it would be necessary to compute a full triangle vs triangle clip or clip multiple edges against multiple edges as in previous approaches. Secondly, each triangle has already been clipped against all possible silhouette edges so there is no need to perform a full clip in the next stage. It becomes sufficient to check if a triangle begins to clip or “would clip” another triangle. If this is the case it’s ok to discard the other triangle because if one triangle partially occludes another that triangle must be a silhouette edge and those cases are handled first.
 
 \subsection{Clipping Triangles to Silhouette Edges}
-	In this stage the goal is to clip every triangle in a bin to the all the silhouette edges in that bin. The act of actually clipping a triangle to a silhouette edge occurs much less frequently than the act of discounting the need to clip a triangle against any of the silhouette edges. Further since clipping a triangle to a silhouette edge may produce new triangles that would then also need to be clipped by edges, this stage has been segmented to retain instruction execution coherence on GPUs.
+%	In this stage the goal is to clip every triangle in a bin to the all the silhouette edges in that bin. The act of actually clipping a triangle to a silhouette edge occurs much less frequently than the act of discounting the need to clip a triangle against any of the silhouette edges. Further since clipping a triangle to a silhouette edge may produce new triangles that would then also need to be clipped by edges, this stage has been segmented to retain instruction execution coherence on GPUs.
 
 This stage clips every triangle in a bin to every silhouette in the bin. Since
 we expect the number of triangles that overlap each silhoette edge to be
@@ -354,6 +369,12 @@ choice of bin size as it related to the number of triangles in a bin.
 % At this point in the pipeline there two options, render directly, or send to a client. Our rendering implementation invokes OpenGL with the depth buffer disabled and uses a pass through vertex shader. Phong shading is implemented in the pixel shader. It follows from this that the system has met the goal of representing the scene as a planar map since it OpenGL can effectively render our output directly. To further show validity as a vector graphics format a rendering backend that uses the Nvidia’s path rendering API is also in place.
 
 \section{Results}
+Our prototype implementation is demonstrated on a variety of well known models,
+specifically the bunny, armadillo, dragon and buddha. Each of these models was
+represented as an indexed face set, and for these examples our silhouette
+extraction used a hash on the vertex indices instead of the vertex
+coordinates, which was inconsequential as silhouette hashing was less than a
+millisecond for all of these examples.
 
 \begin{figure}
 \begin{tabular}{|l|r|r|c|r|} \hline
