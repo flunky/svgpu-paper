@@ -62,33 +62,98 @@ Rendering realistic 3D scenes to vector graphics in real time has not yet been e
 \copyrightspace
 
 \section{Introduction}
+In the earliest days of computer graphics, the VRAM needed for a raster
+framebuffer was prohibitively expensive, and graphics was output in a vector
+format. Hidden line algorithms were needed to convert 3-D scene geometry into
+a planar map of view projected regions with depth complexity one, so their
+outlines could be displayed on the vector display devices available then. Even
+though raster displays have been available for decades, the output of 3-D
+scenes as a vector planar map is still a valuable process for many
+applications. For example, the rendering of 3-D scenes as line art and other
+non-photorealistic rendering approaches are based on the extraction of
+silhouettes and visible regions as planar maps, e.g. \cite{lineart,npr}.
+
+As the output of a 3-D scene renderer, a planar map image of 2-D polygons has
+several advantages over a raster image of pixels. First, vector images provide
+a resolution independent representation that can be efficiently rasterized at
+any resolution onto an arbitrarily sized display, ranging from watches to
+videowalls to head-mounted displays. The rasterization of a planar map consists
+of point-in-polygon
+tests and avoids the need to sort depth, and so does not suffer the
+pathological issues of depth buffering \cite{wmap,etc}. Moreover, the planar
+map vector image allows rasterization to be delayed until display, so the
+display's resolution can be accomodated, and proper edge antialising can be
+performed.
+
+Second, in an era where wireless network bandwidth is a critically
+valuable commodity, vector images are compact, reducing both network
+consumption and latency. Cloud gaming is an emerging trend of the video gaming
+industry, where the display image of a video game is rendered by a server and
+transmitted over the internet to a thin client. Current gaming-as-a-service
+(GaaS) systems render raster images that are transmitted as MPEG streams, but
+these streams consist of full resolution I-frames because the computation of
+block motion on these raw images needed for more efficient MPEG transmission
+creates too much latency. A server rendering 3-D game scenes directly to a
+planar map yields correspondences that would better support motion for more
+efficient game video transmission.
+
 Auzinger et al. \cite{auzinger2013} showed that the computation of analytic
-visibility can be practical on the GPU. They focused on the application of
-antialiased rendering, showing that analytic visibility could be computed
-faster than the multisampling needed for some situations.
+visibility can be practical on the GPU with an edge-based renderer. They
+showed that analytic visibility could be computed faster than the
+multisampling needed to properly rasterize some pathological cases.
 
-Our vector graphics rendering system is designed to convert a 3-D scene mesh
-into a view-projected planar map with depth complexity one. This result can be
-directly converted into a vector graphics representation (e.g. an SVG file) or
-can be quickly rasterized without need for a depth buffer. This system also
-extracts the visual contour as well as the regions it bounds, and both can be
-easily stylized when rendered.
+In this paper we present a real-time triangle-based vector renderer that
+converts a 3-D meshed scene into a planar map of 2-D triangles. This result can
+be directly converted into a vector graphics representation (e.g. SVG)
+or can be quickly rasterized without need for a depth buffer and with
+display-resolution-dependent edge antialiasing such as MLAA, SMAA and CMAA
+[define these]. This system also extracts the
+visual contour as well as the regions it bounds, and both can be easily
+stylized for non-photorealistic rendering.
 
-An emerging trend of the video gaming industry is cloud gaming. In this gaming
-as a service (GaaS), the display of a video game is rendered by a server and
-the resulting image is transmitted over the internet to a thin client. Because
-videogames are live, block motion is typically not predicted and the resulting
-MPEG video stream consists solely of bandwidth consuming I-frames. While block
-motion could be determined between the current frame and the previous, this
-analysis on a generic image stream is too compute intensive to be practical.
+\begin{figure*}
+\includegraphics{images/pipeline.pdf}
+\caption{The stages of our binned vector graphics rendering system.}
+\label{fig:pipeline}
+\end{figure*}
 
-The SVGPU rendering pipeline outputs a stream of frames each consisting of a
-triangle mesh planar map. The vertices of this planar mesh include the proper
-texture coordinates, and are frame coherent. Hence, they can be easily
-converted into the block motion MPEG was originally designed to utilize to
-greatly reduce the bandwidth of cloud gaming.
+Our pipeline consists of 5 stages. The first stage, transform, clipping, and
+binning is borrowed directly from the rasterization pipeline. Our system makes
+no noteworthy additions to these stages. The next three stages make up our
+analytic visibility pipeline. The first stage of analytic visibility, second
+over all, is silhouette extraction via hashing. Silhouettes are computed as
+triangles with neighbor-less edges or triangles with oppositely signed normal
+vectors that share an edge. In the third stage the triangles in each bin are
+clipped to the silhouettes in that bin.  This simplifies the next pipeline
+stage significantly by eliminating the need for brute force triangle vs
+triangle clipping. In the fourth stage a discard test is performed on each
+triangle by clipping it against the other triangles in the bin. The clip here
+is simplified to a would-clip and discard test, since all silhouette edge
+clipping operations have already been resolved. In the fifth stage our system
+has the choice of either converting to a vector graphics format or rendering
+vertex interpolated values via rasterization.
 
-\section{Background}
+The design of our vector renderer is based on the idea that we use the same
+spatial coherence and streamed processing tricks developed for fast
+rasterization graphics pipelines to accelerate the rendering of vector
+graphics. These tricks include binned rendering and spatial hashing, as well
+as load balancing and tuning.
+
+% The visibility pipeline must feature every visible surface, there should be no
+% overlap, and it must output geometry which can be rendered to produce a scene
+% faithful to one rasterized with vertex attribute interpolation. The hidden
+% surface element is solved in our system by a sequence of categorization and
+% clipping operations. The clipping operations in turn satisfy the no overlapping
+% condition [TODO:rephrase]. Since the visibility operations remove all hidden
+% elements accurately (analytically) and leaves all visible geometry, we
+% faithfully represent the scene in 2D. This planer map may be rasterized
+% without condideration for depth in such a way that it is indistinguishable
+% from an image produced by a traditional raster pipeline.  This analytic
+% pipeline has complexity on the order of the geometry, rather than the order of
+% the resolution of the final image and becomes relatively more efficient as
+% final render target resolution increases.
+
+\section{Previous Work}
 TBW
 \begin{itemize}
 \item Rendering to Vector Graphics 
@@ -134,29 +199,10 @@ TBW
 \end{itemize}
 \end{itemize}
 
-\section{An Analytic Pipeline}
-Our goal is to output a planar map representation of a 3D scene in real time. Additionally the system will provide information on silhouettes and contours to the rendering phase for anti-aliasing and potentially NPR effects which make use of these features. In the system we describe, the silhouettes and contours are a byproduct of an efficient pipeline for analytic visibility. Borrowing components from the traditional rasterization pipeline, we exchange our real time analytic visibility algorithms for the rasterization stages and output a planar map. 
-\\\\
-A planar map representation affords us several benefits. First, it is a resolution independent representation that can be efficiently rendered on to an arbitrarily large display. The planer-map renderer needn’t compute anything outside of point in polygon tests and avoids the need to sort depth. Secondly, the format is compact, smaller than the analogous raster image in most cases. This compact format would enables lower latency in client server models and lower bandwidth transmition of video.  These are discussed in more detail later. 
-\\\\
-One byproduct of our pipeline is silhouette and contour edges. These edges are useful for anti-aliasing and NPR effects. This allows a render to restrict anti-aliasing operations to pixels on or near silhouette edges in a similar manner to popular a family of real time post-processes anti-aliasing techniquest such as MLAA, SMAA, and CMAA, which all filter on regions determined to be touched by silhouette edges. There are other techniques which compute analytic silhouette based anti-aliasing, but these techniques are not yet real time [TODO:citation?].
+\section{The SVGPU Pipeline}
 
-\begin{figure*}
-\includegraphics{images/pipeline.pdf}
-\caption{The stages of our binned vector graphics rendering system.}
-\label{fig:pipeline}
-\end{figure*}
-
-Our pipeline consists of 5 stages. The first stage, transform, clipping, and binning is borrowed directly from the rasterization pipeline. Our system makes no noteworthy additions to these stages. The next three stages make up our analytic visibility pipeline. The first stage of analytic visibility, second over all, is silhouette extraction via hashing. Silhouettes are computed as triangles with neighbor-less edges or triangles with oppositely signed normal vectors that share an edge. In the third stage the triangles in each bin are clipped to the silhouettes in that bin.  This simplifies the next pipeline stage significantly by eliminating the need for brute force triangle vs triangle clipping. In the fourth stage a discard test is performed on each triangle by clipping it against the other triangles in the bin. The clip here is simplified to a “would clip” and discard test, since all silhouette edge clipping operations have already been resolved. In the fifth stage our system has the choice of either converting to a vector graphics format or rendering vertex interpolated values via rasterization.
-
-\subsection{Design Requirements}
-The basis for our design decisions stem from a simple philosophy. We assert that the pipeline should look and act like a rasterization pipeline, while replacing stages as needed for rendering to vector graphics. More importantly we assert the pipeline should use reasonably straight forward techniques for each pipeline stage, while applying novel optimizations where they manifest themselves. The most notable of these optimizations is the removal of the need for all to all triangle vs triangle clipping.
-\\\\
-The visibility pipeline must feature every visible surface, there should be no overlap, and it must output geometry which can be rendered to produce a scene faithful to one rasterized with vertex attribute interpolation. The hidden surface element is solved in our system by a sequence of categorization and clipping operations. The clipping operations in turn satisfy the no overlapping condition [TODO:rephrase]. Since the visibility operations remove all hidden elements accurately (analytically) and leaves all visible geometry, we faithfully represent the scene in 2D. This planer map may be rasterized without condideration for depth in such a way that it is indistinguishable from an image produced by a traditional raster pipeline.  The This analytic pipeline has complexity on the order of the geometry, rather than the order of the resolution of the final image and becomes relatively more efficient as final render target resolution increases.
-
-\subsection{Assumptions}
 We make assumptions about the input geometric data and scene to simplify our pipeline design, but acknowledge the need to break these assumptions in the future to support arbitrary geometric data and scene topologies. Firstly it is assumed that the input is an indexed face list, this simplifies our hashing functionality for silhouette edge extraction. Secondly, it is assumed that triangles do not pierce each other, this simplifies the clipping operations. Lastly it is assumed that if a triangle has no neighbor on some edge side then that edge of the triangle can be safely categorized as a silhouette edge and there is no need to fuse any neighboring geometry nearby to that edge. This simplifies silhouettes extraction via hashing.
-\section{Visibility Algorithms}
+
 \subsection{Extracting Silhouettes}
 Extracting silhouettes should be simple, fast, and effective. So a hash based approach is employed which is easy to implement, can be parallelized on GPUs, and provides the analytically correct silhouette edges. The hash key is based on the indices from the indexed face set in pairs of two per edge. Note that spatial hashing would also work in the case where the input is triangle soup, but an index face set in used in the experiments in this paper. The hashing stage requires hash key computation, silhouette edge detection on hash collision, and hash table writes.
 \\\\
@@ -199,24 +245,14 @@ The first kernel clips all triangles from each bin that contained silhouettes wi
 
 \subsection{Occlusion Pass}
 This phase operates in a single kernel and reuses code from the triangle vs edge clipping section. If it is determined that there would be need to clip a triangle is it discarded. The kernel is m by m by n grid where m is the number of triangles in a bin and n is bin count. For reference the bin size used is 128x128 pixels. While this phase is simple it is also fast, a byproduct of the main contribution of our silhouette based algorithm, simplified clipping.
+
 \subsection{Rendering}
 At this point in the pipeline there two options, render directly, or send to a client. Our rendering implementation invokes OpenGL with the depth buffer disabled and uses a pass through vertex shader. Phong shading is implemented in the pixel shader. It follows from this that the system has met the goal of representing the scene as a planar map since it OpenGL can effectively render our output directly. To further show validity as a vector graphics format a rendering backend that uses the Nvidia’s path rendering API is also in place.
-\section{Results}
-Hardware Specs… Scenes… Graphs/Tables… Explanations…
 
-\begin{table}[ht]
-  \centering
-  \caption{A simple table.}
-  \begin{tabular}{|r|l|}
-    \hline
-    7C0 & hexadecimal \\
-    3700 & octal \\ \cline{2-2}
-    11111000000 & binary \\
-    \hline \hline
-    1984 & decimal \\
-    \hline
-  \end{tabular}
-\end{table}
+\section{Results}
+
+
+
  
 \section{Discussion}
 As mentioned we envision a client server model equipped with our system. We imagine this either as a cloud server serving to a low-power machine or, similarly, a powerful machine streaming to a VR HMD. In these model a scene would be submitted to the pipeline server which proceeds to transform, clip, and perform our custom visibility outputting a planar map representation. Then the scene can be sent to the client in its compact form with low latency. The client could avoid all depth-related computation and need only be able to perform point in polygon tests, interpolation, and fragment shading. This hypothetical rasterizer doesn’t even need a z buffer. So it would be consuming almost no bandwidth. [TODO: Not sure I buy this argument.  Due to z-compression, z-buffer bandwidth isn't extreme relative to texture or g-buffer bandwidth used during shading computations]
