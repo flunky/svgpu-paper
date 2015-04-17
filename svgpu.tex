@@ -445,14 +445,16 @@ We have implemented a rebinning solution, such that larger bins are used for
 the clipping stage, and these bins are subdivided into smaller bins for better
 performance of the occlusion stage. This rebinning stage, between the clipping
 and occlusion stages, subdivides the clipping bin into smaller occlusion bins,
-clipping the existing triangles output by the clipping stage to the new
+sifting the existing triangles output by the clipping stage to the new
 smaller occlusion bin boundaries.
 
 Our experiments on the bunny mesh showed that rebinning incurred a 3ms delay,
 in our case rebinning $1/8^2$ clipping bins to $1/64^2$ occlusion bins.
 However, this rebinning maneuver resulted in an overall improved rendering
 rate of 30ms (reduced from the 41ms using fixed bin size), so the additional
-3ms rebinning investment saves 14ms in the quadratic occlusion step.
+3ms rebinning investment saves 14ms by reducing triangles in the quadratic
+occlusion step and increasing triangles per bin to better load balance the
+clipping step.
 
 \subsection{Comparison with Previous Work}
 
