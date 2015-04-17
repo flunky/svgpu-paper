@@ -284,12 +284,20 @@ step, to retain GPU instruction coherence.
 % does not lie between these points on the line, then cull.
 % \end{enumerate}
 
+\begin{figure} \centering
+\includegraphics{images/clipgeom.pdf}
+\caption{Geometric configuration for clipping $\Delta 123$ to silhouette edge
+$\overline{AB}.$}
+\label{fig:clipgeom}
+\end{figure}
+
 The culling step is used to remove most triangle-edge pairings from
 consideration for clipping.
 Let $(x_1,y_1,z_1), (x_2,y_2,z_2)$ and $(x_3,y_3,z_3)$ be the window
 coordinates of a triangle $\Delta 123$, and let $(x_A,y_A,z_A)$ and
 $(x_B,y_B,z_B)$ be the window coordinates of the silhouette edge
-$\overline{AB}$. Then this culling step consist of three tests.
+$\overline{AB},$ as shown in Figure~\ref{fig:clipgeom}. Then this culling step
+consist of three tests.
 \begin{enumerate}
 \item If $(x_1,y_1), (x_2,y_2)$ and $(x_3,y_3)$ lie on one side of the line
 passing through $(x_A,y_A)$ and $(x_B,y_B),$ then cull.
