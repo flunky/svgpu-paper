@@ -69,11 +69,9 @@ a planar map of view projected regions with depth complexity one, so their
 outlines could be displayed on the vector display devices available then. Even
 though raster displays have been available for decades, the output of 3-D
 scenes as a vector planar map is still a valuable process for many
-applications. For example, the rendering of 3-D scenes as line art and other
-non-photorealistic rendering approaches are based on the extraction of
-silhouettes and visible regions as planar maps, e.g. \cite{lineart,npr}. The
-real-time rendering of 3-D shape outlines was a primary feature behind the
-appeal of the Teddy sketching interface \cite{igarashi1999}.
+applications. For example, the real-time rendering of 3-D shape outlines was a
+primary feature behind the appeal of the Teddy sketch-based modeling interface
+\cite{igarashi1999}.
 
 As the output of a 3-D scene renderer, a planar map image of 2-D polygons has
 several advantages over a raster image of pixels. First, vector images provide
@@ -82,9 +80,9 @@ any resolution onto an arbitrarily sized display, ranging from watches to
 videowalls to head-mounted displays. The rasterization of a planar map consists
 of point-in-polygon
 tests and avoids the need to sort depth, and so does not suffer the
-pathological issues of depth buffering \cite{wmap,etc}. Moreover, the planar
-map vector image allows rasterization to be delayed until display, so the
-display's resolution can be accomodated, and proper edge antialising can be
+pathological issues of depth buffering, c.f. \cite{lapidous1999}. Moreover, the
+planar map vector image allows rasterization to be delayed until display, so
+the display's resolution can be accomodated, and proper edge antialising can be
 performed, e.g. \cite{manson2011}.
 
 \begin{figure}[t] \centering
@@ -381,7 +379,7 @@ extraction used a hash on the vertex indices instead of the vertex
 coordinates, which was inconsequential as silhouette hashing was less than a
 millisecond for all of these examples.
 
-\begin{figure}
+\begin{table} \centering
 \begin{tabular}{|l|r|r|c|r|} \hline
 \bf Model & \bf tri. in & \bf tri. out & \bf bin size & \bf time (ms) \\
 \hline
@@ -392,10 +390,10 @@ Buddha & 293K & 1M & $1/48^2$ & 140 \\ \hline
 \end{tabular}
 \caption{Rendering performance on various models, using a bin size of
 $1/48^2.$}
-\label{fig:modelperf}
-\end{figure}
+\label{tab:modelperf}
+\end{table}
 
-Figure~\ref{fig:modelperf} compares the performane of the SVGPU renderer
+Table~\ref{tab:modelperf} compares the performane of the SVGPU renderer
 across several models. The Dragon and Armadillo models are about $3\times$ the
 size of the bunny, but require roughly $6\times$ as much time to render,
 indicating some impact of the quadratic all-pairs triangle occlusion step. The
@@ -447,7 +445,8 @@ for generation of line art or for rasterization with improved edge
 antialiasing and visible surface processing. By binning geometry into small
 screen tiles, about $1/48^2$ of the screen size, we achieve an optimal domain
 decomposition that distributes a parallel clipping workload evenly while
-limiting the impact of an all-pairs quadratic triangle occlusion test.
+limiting the impact of an all-pairs quadratic triangle occlusion test. The
+result yields about a $3\times$ improvement over the state of the art.
 
 There are a few important limitations of this system. Any shading must be
 applied separately, for example as a deferred pixel shader on the rasterized
