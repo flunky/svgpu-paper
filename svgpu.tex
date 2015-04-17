@@ -47,9 +47,9 @@
 \begin{abstract}
 
 Rendering realistic 3D scenes to vector graphics in real time may have been a
-hot topic decades ago, but has now again become interesting, as display
+hot topic decades ago, but has now again become interesting as display
 resolutions grow rapidly and resolution independent rendering supports display
-across a wide variety of devices. Further in the advent of cloud gaming raster
+across a wide variety of devices. Further, in the advent of cloud gaming raster
 images for large displays will prove a significant bottleneck when being
 transported over networks from server to client. We implement a real time
 rendering pipeline that utilizes a novel analytic visibility algorithms to
@@ -145,7 +145,7 @@ spatial hashing to quickly find neighboring frontfacing-backfacing triangle
 pairs with a linear sweep through the mesh. The third stage described in
 Section~\ref{sec:clipping} clips triangles to
 the extracted silhouette edges, limited to the geometry in each bin, using
-dynamic parallelism to better balance load across bins representing
+GPU dynamic parallelism to better balance load across bins representing
 different amounts of geometry. This silhouette clipping of triangles allows
 the fourth stage described in Section~\ref{sec:occlusion} to simply cull
 triangles if any occlusion is detected, which
