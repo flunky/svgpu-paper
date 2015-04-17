@@ -18,7 +18,7 @@
 %%% Used by the ``review'' variation; the online ID will be printed on 
 %%% every page of the content.
 
-\TOGonlineid{45678}
+\TOGonlineid{paper1040}
 
 %%% Used by the ``preprint'' variation.
 
@@ -46,12 +46,21 @@
 
 \begin{abstract}
 
-Rendering realistic 3D scenes to vector graphics in real time has not yet been explored in modern graphics research. Display resolutions have begun to grow rapidly and a resolution independent renderer may thus become interesting. Further in the advent of cloud gaming raster images for large displays will prove a significant bottleneck when being transported over networks from server to client.  Most prior efforts have either achieved sub real time performance or focused on single image generation. We implement a real time rendering pipeline that utilizes a novel analytic visibility algorithms to output a compact vector graphics representation of a 3D scene. Our system is fast and efficient on modern hardware and thus enables the benefits vector graphics representations to reaped by the real time community.
+Rendering realistic 3D scenes to vector graphics in real time may have been a
+hot topic decades ago, but has now again become interesting, as display
+resolutions grow rapidly and resolution independent rendering supports display
+across a wide variety of devices. Further in the advent of cloud gaming raster
+images for large displays will prove a significant bottleneck when being
+transported over networks from server to client. We implement a real time
+rendering pipeline that utilizes a novel analytic visibility algorithms to
+output a compact vector graphics representation of a 3D scene. Our system is
+fast and efficient on modern hardware and thus enables the benefits vector
+graphics representations to reaped by the real time community.
 
 \end{abstract}
 
 \begin{CRcatlist}
-  \CRcat{I.3.3}{Computer Graphics}{Three-Dimensional Graphics and Realism}{Hidden line/surface removal}
+  \CRcat{I.3.7}{Computer Graphics}{Three-Dimensional Graphics and Realism}{Hidden line/surface removal}
   \CRcat{I.3.7}{Computer Graphics}{Three-Dimensional Graphics and Realism}{Visible line/surface algorithms};
 \end{CRcatlist}
 
@@ -87,10 +96,11 @@ performed, e.g. \cite{manson2011}.
 
 \begin{figure}[t] \centering
 \includegraphics[height=3in]{images/bunny-red.png}
-\caption{A toon shaded Stanford bunny rendered as a resolution-independent
-planar map of visible triangle portions (depth complexity is no greater than
-one) in about 34 ms (30 Hz) by the SVGPU vector renderer, representing a
-three-fold improvement over previous GPU vector renderers.}
+\caption{A toon shaded Stanford bunny of 70K triangles rendered as a
+resolution-independent planar map of visible triangle portions (depth
+complexity is no greater than one) in about 30 ms (33 Hz) by the SVGPU vector
+renderer, representing a three-fold improvement over previous GPU vector
+renderers.}
 \end{figure}
 
 Second, in an era where wireless network bandwidth is a critically
@@ -379,19 +389,19 @@ extraction used a hash on the vertex indices instead of the vertex
 coordinates, which was inconsequential as silhouette hashing was less than a
 millisecond for all of these examples.
 
-\begin{table} \centering
-\begin{tabular}{|l|r|r|c|r|} \hline
-\bf Model & \bf tri. in & \bf tri. out & \bf bin size & \bf time (ms) \\
+\begin{table*} \centering
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|} \hline
+\bf Model & \bf $\Delta$ in & \bf $\Delta$ out & \bf bin size & \bf nonempty
+bins & \bf max $\Delta/$bin & \bf ave. $\Delta/$bin & \bf time (ms) \\
 \hline
-Bunny & 69K & 280K & $1/48^2$ & 41 \\ 
-Dragon & 202K & 950K & $1/48^2$ & 222 \\
-Armadillo & 212K & 1.2M & $1/48^2$ & 256 \\
-Buddha & 293K & 1M & $1/48^2$ & 140 \\ \hline
+Bunny & 69K & 280K & $1/48^2$ & 754 & 698 & 139 & 41 \\ 
+Dragon & 202K & 950K & $1/48^2$ & 444 & 1,740 & 555 & 222 \\
+Armadillo & 212K & 1.2M & $1/(48\times 24)$ & 509 & 2,076 & 356 & 256 \\
+Buddha & 293K & 1M & $1/48^2$ & 985 & 712 & 200 & 140 \\ \hline
 \end{tabular}
-\caption{Rendering performance on various models, using a bin size of
-$1/48^2.$}
+\caption{Rendering performance on various models.}
 \label{tab:modelperf}
-\end{table}
+\end{table*}
 
 Table~\ref{tab:modelperf} compares the performane of the SVGPU renderer
 across several models. The Dragon and Armadillo models are about $3\times$ the
@@ -424,6 +434,28 @@ dynamic parallelism work scheduler. The best compromise uses a bin size of
 $1/48^2$ of the window size, but achieves a decent balance from there to
 $1/24^2.$
 
+\subsection{Rebinning}
+As Figure~\ref{fig:binperf} reveals, the bin size affects the performance of
+the vector renderer. Smaller bin sizes reduce the number of triangles for the
+occlusion stage's all-pairs quadratic comparison, whereas larger bin sizes
+hold more triangles which supports better load balancing during the clipping
+stage.
+
+We have implemented a rebinning solution, such that larger bins are used for
+the clipping stage, and these bins are subdivided into smaller bins for better
+performance of the occlusion stage. This rebinning stage, between the clipping
+and occlusion stages, subdivides the clipping bin into smaller occlusion bins,
+clipping the existing triangles output by the clipping stage to the new
+smaller occlusion bin boundaries.
+
+Our experiments on the bunny mesh showed that rebinning incurred a 3ms delay,
+in our case rebinning $1/8^2$ clipping bins to $1/64^2$ occlusion bins.
+However, this rebinning maneuver resulted in an overall improved rendering
+rate of 30ms (reduced from the 41ms using fixed bin size), so the additional
+3ms rebinning investment saves 14ms in the quadratic occlusion step.
+
+\subsection{Comparison with Previous Work}
+
 Prevous results from analytical visibility on the GPU \cite{auzinger2013}
 render the 70K-triangle bunny at a variety of raster resolutions in a time
 ranging from 172 to 212 ms, on an NVidia GeForce GTX 680, which has 1,536
@@ -432,10 +464,10 @@ which has 2,048 cores running at 1.1GHz. Comparing results from different
 GPUs is a complex process, but we can estimate that since GTX 980 represents
 33\% more cores running 10\% faster, we should see about a 47\% improvement in
 speed over the 680 used for analytical visibility's results (ignoring many
-other differences, including e.g. memory bandwidth). SVGPU renders the
-bunny into a planar map at 34ms, whereas analytic visibility running 47\%
-faster would render the bunny in about 117 ms, leading us to believe SVGPU is
-about three times faster.
+other differences, including e.g. memory bandwidth). The improved rebinning
+SVGPU renders the bunny into a planar map at 30ms, whereas analytic visibility
+running 47\% faster would render the bunny in about 117 ms, leading us to
+believe SVGPU is about three times faster.
  
 \section{Conclusion}
 % As mentioned we envision a client server model equipped with our system. We imagine this either as a cloud server serving to a low-power machine or, similarly, a powerful machine streaming to a VR HMD. In these model a scene would be submitted to the pipeline server which proceeds to transform, clip, and perform our custom visibility outputting a planar map representation. Then the scene can be sent to the client in its compact form with low latency. The client could avoid all depth-related computation and need only be able to perform point in polygon tests, interpolation, and fragment shading. This hypothetical rasterizer doesn’t even need a z buffer. So it would be consuming almost no bandwidth. [TODO: Not sure I buy this argument.  Due to z-compression, z-buffer bandwidth isn't extreme relative to texture or g-buffer bandwidth used during shading computations]
