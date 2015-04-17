@@ -91,7 +91,8 @@ performed, e.g. \cite{manson2011}.
 \includegraphics[height=3in]{images/bunny-red.png}
 \caption{A toon shaded Stanford bunny rendered as a resolution-independent
 planar map of visible triangle portions (depth complexity is no greater than
-one) in about 34 ms (30 Hz) by the SVGPU vector renderer.}
+one) in about 34 ms (30 Hz) by the SVGPU vector renderer, representing a
+three-fold improvement over previous GPU vector renderers.}
 \end{figure}
 
 Second, in an era where wireless network bandwidth is a critically
@@ -125,27 +126,32 @@ and both can be easily stylized for non-photorealistic rendering.
 \label{fig:pipeline}
 \end{figure*}
 
-Our pipeline consists of 5 stages. The first stage, transform, clipping, and
-binning is borrowed directly from the rasterization pipeline. Our system makes
-no noteworthy additions to these stages. The next three stages make up our
-analytic visibility pipeline. The first stage of analytic visibility, second
-over all, is silhouette extraction via hashing. Silhouettes are computed as
-triangles with neighbor-less edges or triangles with oppositely signed normal
-vectors that share an edge. In the third stage the triangles in each bin are
-clipped to the silhouettes in that bin.  This simplifies the next pipeline
-stage significantly by eliminating the need for brute force triangle vs
-triangle clipping. In the fourth stage a discard test is performed on each
-triangle by clipping it against the other triangles in the bin. The clip here
-is simplified to a would-clip and discard test, since all silhouette edge
-clipping operations have already been resolved. In the fifth stage our system
-has the choice of either converting to a vector graphics format or rendering
-vertex interpolated values via rasterization.
+Our pipeline consists of five stages described in Section~\ref{sec:svgpu}. The
+first stage performs transform,
+clipping, and binning operations, which is borrowed directly from the
+rasterization pipeline, and we make no noteworthy additions to these
+operations. The next three stages form the main contribution of the analytic
+visibility pipeline. The second stage, described in
+Section~\ref{sec:silhouette} performs silhouette extraction using GPU
+spatial hashing to quickly find neighboring frontfacing-backfacing triangle
+pairs with a linear sweep through the mesh. The third stage described in
+Section~\ref{sec:clipping} clips triangles to
+the extracted silhouette edges, limited to the geometry in each bin, using
+dynamic parallelism to better balance load across bins representing
+different amounts of geometry. This silhouette clipping of triangles allows
+the fourth stage described in Section~\ref{sec:occlusion} to simply cull
+triangles if any occlusion is detected, which
+is a quadratic-time comparison between all-pairs of triangles in a bin.
+The fifth stage our system outputs the result, either as a vector
+representation of the planar map of triangular regions, or by rasterization of
+the depth-complexity-one, which provides additional benefits for edge
+antialiasing and resolves some depth rendering issues.
 
 The design of our vector renderer is based on the idea that we use the same
 spatial coherence and streamed processing tricks developed for fast
 rasterization graphics pipelines to accelerate the rendering of vector
 graphics. These tricks include binned rendering and spatial hashing, as well
-as load balancing and tuning.
+as load balancing and tuning, which is analyzed in Section~\ref{sec:results}
 
 % The visibility pipeline must feature every visible surface, there should be no
 % overlap, and it must output geometry which can be rendered to produce a scene
@@ -213,7 +219,7 @@ the silhouette edges only for clipping to yield better performance results.
 % \item AUZINGER T., GUTHE M., JESCHKE S.: Analytic Anti-Aliasing of Linear Functions on Polytopes.
 % Nah
 
-\section{The SVGPU Pipeline}
+\section{The SVGPU Pipeline} \label{sec:svgpu}
 
 The input to our pipeline is a 3-D scene consisting of triangle meshes,
 represented as an indexed face set, without need of an edge-based data
@@ -224,12 +230,11 @@ another triangle, which simplifies clipping and occlusion.
 
 The first stage of our pipeline performs the ordinary vertex processing
 pipeline found in common rasterization systems, such as OpenGL. This stage
-transforms world-space triangles into a perspective-distorted ``clip''
-coordinate system, in which frustum clipping and homogeneous divide have been
-applied. The triangles are then organized into 2-D viewing bins organized as a
-grid across the viewing window. {\bf [Are they clipped to the bin boundaries?]}
+transforms world-space triangles into a perspective viewed ``window''
+coordinate system.  The triangles are then organized and clipped into 2-D grid
+of viewing bins organized across the window.
 
-\subsection{Extracting Silhouettes}
+\subsection{Silhouette Extraction} \label{sec:silhouette}
 SVGPU uses a spatial hash table, which can be efficiently constructed and
 accesssed on the GPU \cite{lefebvre2006}, to detect which edges form the
 silhouette. (We use the term silhouette in this paper loosely, to refer to the
@@ -249,7 +254,7 @@ where the hash table lists any number of triangles besides two.
 
 % As previously stated computing silhouettes is important to our pipeline because it simplifies the clipping computations needed to compute analytic visibility. Silhouettes have additional benefits to rendering, as previously mentioned. Silhouette processing simplifies the computation in two ways. Now the system only needs to compute the clipping of each triangle against one edge at a time, the silhouette edges. Alternatively it would be necessary to compute a full triangle vs triangle clip or clip multiple edges against multiple edges as in previous approaches. Secondly, each triangle has already been clipped against all possible silhouette edges so there is no need to perform a full clip in the next stage. It becomes sufficient to check if a triangle begins to clip or “would clip” another triangle. If this is the case it’s ok to discard the other triangle because if one triangle partially occludes another that triangle must be a silhouette edge and those cases are handled first.
 
-\subsection{Clipping Triangles to Silhouette Edges}
+\subsection{Clipping} \label{sec:clipping}
 %	In this stage the goal is to clip every triangle in a bin to the all the silhouette edges in that bin. The act of actually clipping a triangle to a silhouette edge occurs much less frequently than the act of discounting the need to clip a triangle against any of the silhouette edges. Further since clipping a triangle to a silhouette edge may produce new triangles that would then also need to be clipped by edges, this stage has been segmented to retain instruction execution coherence on GPUs.
 
 This stage clips every triangle in a bin to every silhouette in the bin. Since
@@ -330,7 +335,7 @@ in each triangle's list. These rounds are double buffered, such that each
 round reads the triangle data from one buffer and writes the subdivided
 triangles to the other buffer, which will be the input for the next round.
 
-\subsection{Occlusion}
+\subsection{Occlusion} \label{sec:occlusion}
 
 Since all of the triangles have been clipped to silhouette edges by the
 previous stage, and since there are no piercing triangles, then each remaining
@@ -368,7 +373,7 @@ choice of bin size as it related to the number of triangles in a bin.
 % \subsection{Rendering}
 % At this point in the pipeline there two options, render directly, or send to a client. Our rendering implementation invokes OpenGL with the depth buffer disabled and uses a pass through vertex shader. Phong shading is implemented in the pixel shader. It follows from this that the system has met the goal of representing the scene as a planar map since it OpenGL can effectively render our output directly. To further show validity as a vector graphics format a rendering backend that uses the Nvidia’s path rendering API is also in place.
 
-\section{Results}
+\section{Results} \label{sec:results}
 Our prototype implementation is demonstrated on a variety of well known models,
 specifically the bunny, armadillo, dragon and buddha. Each of these models was
 represented as an indexed face set, and for these examples our silhouette
@@ -396,9 +401,9 @@ size of the bunny, but require roughly $6\times$ as much time to render,
 indicating some impact of the quadratic all-pairs triangle occlusion step. The
 tiled approach, combined with aggressive parallelism helps to avoid the
 $9\times$ render time that would be expected when a quadratic step dominates
-the process. The Buddha model contains even more geometry, but renders in
-significantly less time, perhaps due to the more even distribution of its
-geometry across the tiles.
+the process. The Buddha model contains even more geometry, but includes larger
+triangles and is distributed across more tiles, and so renders in
+significantly less time.
 
 \begin{figure} \centering
 \includegraphics{images/binperf.pdf}
@@ -420,20 +425,44 @@ balancing of the clipping of triangles to silhouette edges implemented using a
 dynamic parallelism work scheduler. The best compromise uses a bin size of
 $1/48^2$ of the window size, but achieves a decent balance from there to
 $1/24^2.$
+
+Prevous results from analytical visibility on the GPU \cite{auzinger2013}
+render the 70K-triangle bunny at a variety of raster resolutions in a time
+ranging from 172 to 212 ms, on an NVidia GeForce GTX 680, which has 1,536
+cores running at 1GHz. Our results were computed on an NVidia GeForce GTX 980,
+which has 2,048 cores running at 1.1GHz. Comparing results from different
+GPUs is a complex process, but we can estimate that since GTX 980 represents
+33\% more cores running 10\% faster, we should see about a 47\% improvement in
+speed over the 680 used for analytical visibility's results (ignoring many
+other differences, including e.g. memory bandwidth). SVGPU renders the
+bunny into a planar map at 34ms, whereas analytic visibility running 47\%
+faster would render the bunny in about 117 ms, leading us to believe SVGPU is
+about three times faster.
  
-\section{Discussion}
-As mentioned we envision a client server model equipped with our system. We imagine this either as a cloud server serving to a low-power machine or, similarly, a powerful machine streaming to a VR HMD. In these model a scene would be submitted to the pipeline server which proceeds to transform, clip, and perform our custom visibility outputting a planar map representation. Then the scene can be sent to the client in its compact form with low latency. The client could avoid all depth-related computation and need only be able to perform point in polygon tests, interpolation, and fragment shading. This hypothetical rasterizer doesn’t even need a z buffer. So it would be consuming almost no bandwidth. [TODO: Not sure I buy this argument.  Due to z-compression, z-buffer bandwidth isn't extreme relative to texture or g-buffer bandwidth used during shading computations]
-\\\\
-There are a few important limitations in our system. One, is pixel shaded images must be generated by running a pixel shader on the output of a rasterization of our output. Two, texture mapping must be handled in the same way and this would eliminate the argument that our format is compact yielding low latency transfers. However, textures could be streamed to the client once and reused for many frames.  Textures could also be compressed or regioned. There is also work on generating vector graphics representations of textures, but the texturing problem is left as future work.
-\\\\
-Shadows are of great interest in real time applications and it is desirable to make them work in our infrastructure. Shadow volumes are a promising approach because they can be computed analytically and stored in a vector graphic format. Soft shadow volumes could potentially be embedded as well with a blend layer, and we have work ongoing in this area. Indeed the idea of representing layered vector graphics and interpolation schemes is not in any way out of scope for the continuation of this project. [TODO: transparency?]
-
 \section{Conclusion}
-plus future work.
+% As mentioned we envision a client server model equipped with our system. We imagine this either as a cloud server serving to a low-power machine or, similarly, a powerful machine streaming to a VR HMD. In these model a scene would be submitted to the pipeline server which proceeds to transform, clip, and perform our custom visibility outputting a planar map representation. Then the scene can be sent to the client in its compact form with low latency. The client could avoid all depth-related computation and need only be able to perform point in polygon tests, interpolation, and fragment shading. This hypothetical rasterizer doesn’t even need a z buffer. So it would be consuming almost no bandwidth. [TODO: Not sure I buy this argument.  Due to z-compression, z-buffer bandwidth isn't extreme relative to texture or g-buffer bandwidth used during shading computations]
 
-\section*{Acknowledgements}
+We have shown that the GPU can implement a vector rendering system suitable
+for generation of line art or for rasterization with improved edge
+antialiasing and visible surface processing. By binning geometry into small
+screen tiles, about $1/48^2$ of the screen size, we achieve an optimal domain
+decomposition that distributes a parallel clipping workload evenly while
+limiting the impact of an all-pairs quadratic triangle occlusion test.
 
-No acknowledgments in review version.
+There are a few important limitations of this system. Any shading must be
+applied separately, for example as a deferred pixel shader on the rasterized
+planar map. The subdivision of triangles due to clipping can preserve
+perspective-correct interpolation of texture coordinates and other vertex
+attributes to ensure the necessary data is available for proper shading.
+
+The planar map output delivers a planar map consisting only of the visible
+portion of the visual contour and the regions it bounds, tesselated by many
+small clipped triangles (which could be re-merged into larger regions by the
+display stage). The inclusion of cast shadows would be a useful addition to
+this system. While the outlines of the cast shadows can be determined by
+running the process from the point of view of a light source, the integration
+of cast shadow contours into the visual contours of the silhouette can be
+tricky and is left as future work.
 
 \bibliographystyle{acmsiggraph}
 \bibliography{svgpu}
